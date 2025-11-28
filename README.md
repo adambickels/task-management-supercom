@@ -70,8 +70,13 @@ Before running this application, ensure you have the following installed:
 
 ```bash
 git clone <repository-url>
-cd "SUPERCOM TEST"
+cd task-management-system
 ```
+
+**Or if you received this as a ZIP file:**
+
+1. Extract the ZIP file to your desired location
+2. Open a terminal/PowerShell in the extracted folder
 
 ### 2. Database Setup
 
@@ -875,6 +880,77 @@ The documentation provides detailed setup instructions, architectural explanatio
 
 ---
 
+## Git Repository Submission
+
+This project has been properly initialized as a Git repository with all source code committed.
+
+### Repository Contents
+
+✅ **All source code files** (.cs, .tsx, .ts, .json, .csproj, .sln)  
+✅ **Setup scripts** (setup.ps1, start-api.ps1, start-service.ps1, start-frontend.ps1)  
+✅ **Configuration files** (appsettings.json, docker-compose.yml)  
+✅ **Documentation** (README.md, TESTING.md)  
+✅ **Test files** (23 comprehensive unit tests)  
+✅ **Proper .gitignore** (excludes build artifacts, node_modules, logs)
+
+### Repository Structure
+
+```
+commit 78c6af6
+Author: Adam Bickels
+Date: November 28, 2025
+
+    Initial commit: Task Management Application for SUPERCOM
+    
+    - 73 files changed, 12,088 insertions
+    - Complete source code for all layers
+    - All tests included (23 passing tests)
+    - Setup scripts for easy deployment
+    - Comprehensive documentation
+```
+
+### To Submit/Share This Repository
+
+**Option 1: Push to GitHub/GitLab/Bitbucket**
+
+```powershell
+# Add your remote repository
+git remote add origin <your-repository-url>
+
+# Push to remote
+git push -u origin master
+```
+
+**Option 2: Create a ZIP Archive**
+
+```powershell
+# Create a clean zip without build artifacts
+git archive -o task-management-app.zip HEAD
+```
+
+**Option 3: Share Folder Directly**
+
+The current folder can be shared as-is. Recipients can:
+1. Copy the folder
+2. Run `git log` to see commit history
+3. Run `.\setup.ps1` to get started
+
+### Verification Checklist
+
+Before submission, verify:
+
+- [x] All source code is committed
+- [x] Build artifacts are excluded (.gitignore)
+- [x] Documentation is complete and up-to-date
+- [x] Setup scripts are tested and working
+- [x] Tests are passing (run `dotnet test`)
+- [x] Application runs successfully with provided scripts
+- [x] README includes all required information
+- [x] SQL query for 2+ tags is documented
+- [x] Concurrent update handling is tested and documented
+
+---
+
 ## About This Project
 
 This application was developed by **Adam Bickels** as a **Full-Stack Developer assignment for SUPERCOM** to demonstrate proficiency in:
@@ -884,8 +960,22 @@ This application was developed by **Adam Bickels** as a **Full-Stack Developer a
 - Background services and message queuing
 - Modern frontend development with TypeScript and Redux
 - RESTful API design and documentation
+- Concurrent update handling with RabbitMQ
+- Comprehensive testing strategies
 
-**Developer:** Adam Bickels
+**Developer:** Adam Bickels  
+**Date:** November 2025  
+**Purpose:** Technical Assessment for SUPERCOM
+
+---
+
+## Contact & Support
+
+For questions about this implementation, please contact:
+- **Developer:** Adam Bickels
+- **Assignment:** SUPERCOM Full-Stack Developer Home Assignment
+
+---
 
 ## License
 
