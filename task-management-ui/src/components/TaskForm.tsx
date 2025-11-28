@@ -14,11 +14,12 @@ import {
   Box,
   Stack,
   OutlinedInput,
+  Alert,
   type SelectChangeEvent,
 } from '@mui/material';
 import type { TaskItem, Tag, CreateTaskRequest } from '../types';
-import { useAppDispatch } from '../store/hooks';
-import { createTask, updateTask } from '../store/taskSlice';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { createTask, updateTask, clearError } from '../store/taskSlice';
 import styles from './TaskForm.module.scss';
 
 interface TaskFormProps {
@@ -30,6 +31,7 @@ interface TaskFormProps {
 
 const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
   const dispatch = useAppDispatch();
+  const { loading, error } = useAppSelector((state) => state.tasks);
   const isSubmittingRef = useRef(false);
   const [formData, setFormData] = useState<CreateTaskRequest>({
     title: '',
@@ -42,14 +44,12 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
     tagIds: [],
   });
 
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     // Defer state updates to avoid cascading renders
     if (open) {
       const timeoutId = setTimeout(() => {
-        setIsSubmitting(false);
         if (task) {
           setFormData({
             title: task.title,
@@ -73,12 +73,13 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
             tagIds: [],
           });
         }
-        setErrors({});
+        setValidationErrors({});
+        dispatch(clearError());
       }, 0);
 
       return () => clearTimeout(timeoutId);
     }
-  }, [task, open]);
+  }, [task, open, dispatch]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -97,6 +98,17 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
 
     if (!formData.dueDate) {
       newErrors.dueDate = 'Due date is required';
+    } else {
+      // Check if due date/time is in the past
+      const selectedDateTime = new Date(formData.dueDate);
+      const now = new Date();
+      // Remove seconds and milliseconds for fair comparison
+      now.setSeconds(0, 0);
+      selectedDateTime.setSeconds(0, 0);
+      
+      if (selectedDateTime < now) {
+        newErrors.dueDate = 'Due date and time cannot be in the past';
+      }
     }
 
     if (!formData.fullName.trim()) {
@@ -123,7 +135,7 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
       newErrors.tagIds = 'At least one tag is required';
     }
 
-    setErrors(newErrors);
+    setValidationErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
@@ -132,7 +144,7 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
     e.stopPropagation();
 
     // Use ref for immediate synchronous check - return immediately if already submitting
-    if (isSubmittingRef.current) {
+    if (isSubmittingRef.current || loading) {
       return;
     }
 
@@ -140,9 +152,8 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
       return;
     }
 
-    // Set both ref (synchronous) and state (for UI)
+    // Set ref to prevent double submission
     isSubmittingRef.current = true;
-    setIsSubmitting(true);
     
     try {
       if (task) {
@@ -152,24 +163,48 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
       }
       onClose();
     } catch (error) {
-      console.error('Error saving task:', error);
+      // Log for developers (appears in console/monitoring)
+      console.error('Failed to save task:', error);
+      // Error is also handled by Redux state and displayed in Alert UI
+      // Keep the form open so user can see the error and retry
     } finally {
       // Small delay before resetting to prevent race conditions
       setTimeout(() => {
         isSubmittingRef.current = false;
-        setIsSubmitting(false);
       }, 300);
     }
   };
 
   const handleChange = (field: keyof CreateTaskRequest, value: string | number | number[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors((prev) => {
+    
+    // Validate due date in real-time
+    if (field === 'dueDate' && typeof value === 'string' && value) {
+      const selectedDateTime = new Date(value);
+      const now = new Date();
+      now.setSeconds(0, 0);
+      selectedDateTime.setSeconds(0, 0);
+      
+      if (selectedDateTime < now) {
+        setValidationErrors((prev) => ({
+          ...prev,
+          dueDate: 'Due date and time cannot be in the past'
+        }));
+        return;
+      }
+    }
+    
+    // Clear validation error for this field when user starts typing
+    if (validationErrors[field]) {
+      setValidationErrors((prev) => {
         const newErrors = { ...prev };
         delete newErrors[field];
         return newErrors;
       });
+    }
+    // Clear Redux error when user makes changes
+    if (error) {
+      dispatch(clearError());
     }
   };
 
@@ -183,6 +218,11 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
       <form onSubmit={handleSubmit}>
         <DialogTitle>{task ? 'Edit Task' : 'Create New Task'}</DialogTitle>
         <DialogContent>
+          {error && (
+            <Alert severity="error" onClose={() => dispatch(clearError())} sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
           <Stack spacing={2} className={styles.formContent}>
             <TextField
               label="Title"
@@ -190,8 +230,8 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
               required
               value={formData.title}
               onChange={(e) => handleChange('title', e.target.value)}
-              error={!!errors.title}
-              helperText={errors.title}
+              error={!!validationErrors.title}
+              helperText={validationErrors.title}
             />
 
             <TextField
@@ -202,8 +242,8 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
               rows={4}
               value={formData.description}
               onChange={(e) => handleChange('description', e.target.value)}
-              error={!!errors.description}
-              helperText={errors.description}
+              error={!!validationErrors.description}
+              helperText={validationErrors.description}
             />
 
             <Box className={styles.fieldRow}>
@@ -214,10 +254,13 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
                 required
                 value={formData.dueDate}
                 onChange={(e) => handleChange('dueDate', e.target.value)}
-                error={!!errors.dueDate}
-                helperText={errors.dueDate}
+                error={!!validationErrors.dueDate}
+                helperText={validationErrors.dueDate}
                 InputLabelProps={{
                   shrink: true,
+                }}
+                inputProps={{
+                  min: new Date().toISOString().slice(0, 16),
                 }}
               />
 
@@ -237,7 +280,7 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
               </FormControl>
             </Box>
 
-            <FormControl fullWidth error={!!errors.tagIds}>
+            <FormControl fullWidth error={!!validationErrors.tagIds}>
               <InputLabel>Tags</InputLabel>
               <Select
                 multiple
@@ -259,9 +302,9 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
                   </MenuItem>
                 ))}
               </Select>
-              {errors.tagIds && (
+              {validationErrors.tagIds && (
                 <div className={styles.errorText}>
-                  {errors.tagIds}
+                  {validationErrors.tagIds}
                 </div>
               )}
             </FormControl>
@@ -272,8 +315,8 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
               required
               value={formData.fullName}
               onChange={(e) => handleChange('fullName', e.target.value)}
-              error={!!errors.fullName}
-              helperText={errors.fullName}
+              error={!!validationErrors.fullName}
+              helperText={validationErrors.fullName}
             />
 
             <Box className={styles.fieldRow}>
@@ -287,8 +330,8 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
                   const value = e.target.value.replace(/[^\d\-+()]/g, '');
                   handleChange('telephone', value);
                 }}
-                error={!!errors.telephone}
-                helperText={errors.telephone}
+                error={!!validationErrors.telephone}
+                helperText={validationErrors.telephone}
                 placeholder="+1-234-567-8900"
               />
 
@@ -299,16 +342,16 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
                 type="email"
                 value={formData.email}
                 onChange={(e) => handleChange('email', e.target.value)}
-                error={!!errors.email}
-                helperText={errors.email}
+                error={!!validationErrors.email}
+                helperText={validationErrors.email}
               />
             </Box>
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={onClose} disabled={isSubmitting}>Cancel</Button>
-          <Button type="submit" variant="contained" color="primary" disabled={isSubmitting}>
-            {isSubmitting ? 'Saving...' : task ? 'Update' : 'Create'}
+          <Button onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button type="submit" variant="contained" color="primary" disabled={loading}>
+            {loading ? 'Saving...' : task ? 'Update' : 'Create'}
           </Button>
         </DialogActions>
       </form>

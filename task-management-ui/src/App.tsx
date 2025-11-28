@@ -46,7 +46,9 @@ const App = () => {
       try {
         await dispatch(deleteTask(id)).unwrap();
       } catch (error) {
-        console.error('Error deleting task:', error);
+        // Log for developers (appears in console/monitoring)
+        console.error('Failed to delete task:', error);
+        // Error is also handled by Redux state and displayed in Alert component below
       }
     }
   };
