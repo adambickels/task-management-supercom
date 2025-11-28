@@ -1,0 +1,26 @@
+.container {
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+}
+
+.header {
+  margin-bottom: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  margin-bottom: 0;
+}
+
+.alert {
+  margin-bottom: 1rem;
+}
+
+.loadingContainer {
+  display: flex;
+  justify-content: center;
+  padding-top: 4rem;
+  padding-bottom: 4rem;
+}
