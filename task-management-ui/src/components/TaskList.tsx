@@ -24,7 +24,7 @@ interface TaskListProps {
 }
 
 const TaskList = ({ tasks, onEdit, onDelete }: TaskListProps) => {
-  const getPriorityColor = (priority: number) => {
+  const getPriorityColor = (priority: number): "success" | "info" | "warning" | "error" | "default" => {
     switch (priority) {
       case 1:
         return 'success';
@@ -41,7 +41,7 @@ const TaskList = ({ tasks, onEdit, onDelete }: TaskListProps) => {
     }
   };
 
-  const getPriorityLabel = (priority: number) => {
+  const getPriorityLabel = (priority: number): string => {
     switch (priority) {
       case 1:
         return 'Very Low';
@@ -58,18 +58,18 @@ const TaskList = ({ tasks, onEdit, onDelete }: TaskListProps) => {
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const isOverdue = (dueDate: string) => {
+  const isOverdue = (dueDate: string): boolean => {
     return new Date(dueDate) < new Date();
   };
 
   if (tasks.length === 0) {
     return (
-      <Box className={styles.emptyState}>
+      <Box className={styles.emptyState} role="status" aria-live="polite">
         <Typography variant="h6" color="text.secondary">
           No tasks found. Create your first task to get started!
         </Typography>
@@ -78,9 +78,9 @@ const TaskList = ({ tasks, onEdit, onDelete }: TaskListProps) => {
   }
 
   return (
-    <Stack spacing={3}>
+    <Stack spacing={3} role="list" aria-label="Task list">
       {tasks.map((task) => (
-        <Card key={task.id} className={styles.taskCard}>
+        <Card key={task.id} className={styles.taskCard} role="listitem">
           <CardContent>
             <Box className={styles.cardHeader}>
               <Box className={styles.taskInfo}>
@@ -96,6 +96,8 @@ const TaskList = ({ tasks, onEdit, onDelete }: TaskListProps) => {
                   onClick={() => onEdit(task)}
                   color="primary"
                   size="small"
+                  aria-label={`Edit task: ${task.title}`}
+                  title="Edit task"
                 >
                   <EditIcon />
                 </IconButton>
@@ -103,41 +105,51 @@ const TaskList = ({ tasks, onEdit, onDelete }: TaskListProps) => {
                   onClick={() => onDelete(task.id)}
                   color="error"
                   size="small"
+                  aria-label={`Delete task: ${task.title}`}
+                  title="Delete task"
                 >
                   <DeleteIcon />
                 </IconButton>
               </Box>
             </Box>
 
-            <Box className={styles.chipContainer}>
+            <Box className={styles.chipContainer} role="group" aria-label="Task metadata">
               <Chip
                 label={getPriorityLabel(task.priority)}
                 color={getPriorityColor(task.priority)}
                 size="small"
+                aria-label={`Priority: ${getPriorityLabel(task.priority)}`}
               />
               <Chip
                 label={`Due: ${formatDate(task.dueDate)}`}
                 color={isOverdue(task.dueDate) ? 'error' : 'default'}
                 size="small"
                 variant={isOverdue(task.dueDate) ? 'filled' : 'outlined'}
+                aria-label={`Due date: ${formatDate(task.dueDate)}${isOverdue(task.dueDate) ? ' (Overdue)' : ''}`}
               />
               {task.tags.map((tag) => (
-                <Chip key={tag.id} label={tag.name} size="small" variant="outlined" />
+                <Chip 
+                  key={tag.id} 
+                  label={tag.name} 
+                  size="small" 
+                  variant="outlined" 
+                  aria-label={`Tag: ${tag.name}`}
+                />
               ))}
             </Box>
 
-            <Box className={styles.contactInfo}>
+            <Box className={styles.contactInfo} role="group" aria-label="Contact information">
               <Box className={styles.contactRow}>
-                <PersonIcon fontSize="small" color="action" />
-                <Typography variant="body2">{task.fullName}</Typography>
+                <PersonIcon fontSize="small" color="action" aria-hidden="true" />
+                <Typography variant="body2" aria-label={`Full name: ${task.fullName}`}>{task.fullName}</Typography>
               </Box>
               <Box className={styles.contactRow}>
-                <PhoneIcon fontSize="small" color="action" />
-                <Typography variant="body2">{task.telephone}</Typography>
+                <PhoneIcon fontSize="small" color="action" aria-hidden="true" />
+                <Typography variant="body2" aria-label={`Telephone: ${task.telephone}`}>{task.telephone}</Typography>
               </Box>
               <Box className={styles.contactRow}>
-                <EmailIcon fontSize="small" color="action" />
-                <Typography variant="body2">{task.email}</Typography>
+                <EmailIcon fontSize="small" color="action" aria-hidden="true" />
+                <Typography variant="body2" aria-label={`Email: ${task.email}`}>{task.email}</Typography>
               </Box>
             </Box>
           </CardContent>

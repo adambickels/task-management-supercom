@@ -102,7 +102,44 @@ dotnet ef database update --project ..\TaskManagement.Infrastructure\TaskManagem
 
 This will create the database and seed initial tag data.
 
-### 3. Install RabbitMQ
+### 3. Configuration
+
+#### Backend Configuration (`appsettings.json`)
+
+```json
+{
+  "Pagination": {
+    "DefaultPageSize": 10,
+    "MaxPageSize": 100
+  },
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Database=TaskManagementDb;..."
+  }
+}
+```
+
+#### Frontend Configuration (`.env.development`, `.env.production`)
+
+```env
+VITE_API_BASE_URL=http://localhost:5119/api/v1.0
+VITE_DEFAULT_PAGE_SIZE=10
+```
+
+#### Environment Variables
+
+Set the following environment variable on your API server for CORS configuration:
+
+```bash
+# Windows PowerShell
+$env:CORS_ORIGINS = "http://localhost:5173,http://localhost:3000"
+
+# Production example
+$env:CORS_ORIGINS = "https://yourdomain.com,https://www.yourdomain.com"
+```
+
+For development, if `CORS_ORIGINS` is not set, it defaults to `http://localhost:5173` and `http://localhost:3000`.
+
+### 4. Install RabbitMQ
 
 #### Windows:
 1. Install Erlang: [Download](https://www.erlang.org/downloads)
@@ -119,7 +156,7 @@ This will create the database and seed initial tag data.
 docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:management
 ```
 
-### 4. Backend Setup
+### 4. Install RabbitMQ
 
 ```bash
 # Restore NuGet packages
@@ -129,7 +166,7 @@ dotnet restore
 dotnet build
 ```
 
-### 5. Frontend Setup
+### 5. Backend Setup
 
 ```bash
 cd task-management-ui
@@ -221,6 +258,9 @@ The application follows a clean architecture pattern with the following layers:
 - SQL Server
 - RabbitMQ.Client 7.2.0
 - Swashbuckle (Swagger)
+- Asp.Versioning.Mvc 8.1.0 (API Versioning)
+- AutoMapper 12.0.1 (DTO Mapping)
+- Serilog (Structured Logging)
 
 ### Frontend
 - React 18 with TypeScript
@@ -228,6 +268,7 @@ The application follows a clean architecture pattern with the following layers:
 - Redux Toolkit for state management
 - Material-UI (MUI) for UI components
 - Axios for HTTP requests
+- Vitest & React Testing Library
 
 ### Infrastructure
 - SQL Server for data persistence
@@ -250,20 +291,19 @@ dotnet test --collect:"XPlat Code Coverage"
 ```
 
 **Test Coverage:**
-- API Controllers (TasksController)
-- RabbitMQ Service - Concurrent message handling
-- Windows Service Worker - Concurrent task processing
-- Unit tests with Moq and FluentAssertions
-- **23 test cases** covering:
-  - CRUD operations and validation
-  - Concurrent message publishing (50+ messages simultaneously)
-  - Concurrent message consumption with proper acknowledgment
-  - High-load scenarios (100+ concurrent publish/consume operations)
-  - Real-world concurrent update simulations
-  - Message ordering and data integrity
-  - Connection handling and durability
-  - Backpressure and variable load handling
-  - Multiple service instance independence
+- **56 test cases** covering:
+  - Repository Tests (TaskItemRepository: 17 tests, TagRepository: 8 tests)
+    - CRUD operations with soft delete support
+    - Pagination edge cases (empty pages, out of bounds, normalization)
+    - Query optimization validation (AsNoTracking)
+  - Controller Tests (TasksController: 5 tests, TagsController: 8 tests)
+    - CRUD endpoints and validation
+    - Response caching behavior
+  - Service Tests
+    - RabbitMQ concurrent message handling (50+ messages simultaneously)
+    - Windows Service Worker concurrent task processing
+    - Dead letter queue with retry logic
+  - Unit tests with xUnit, Moq, and FluentAssertions
 
 ### Frontend Tests
 
@@ -280,9 +320,14 @@ npm run test:coverage
 ```
 
 **Test Coverage:**
-- React Components (TaskForm, TaskList)
-- Redux Store (taskSlice)
-- 17 test cases using Vitest and React Testing Library
+- **21 test cases** covering:
+  - React Components (TaskForm: 11 tests, TaskList: 4 tests)
+    - Form validation (required fields, email format, phone format)
+    - User interactions and submission
+  - Redux Store (taskSlice: 6 tests)
+    - State management and async operations
+    - Pagination state handling
+  - Vitest and React Testing Library
 
 See [TESTING.md](TESTING.md) for detailed testing documentation.
 
@@ -345,6 +390,20 @@ SUPERCOM TEST/
 
 ## Key Features
 
+### API Features
+- **API Versioning**: URL-based versioning (`/api/v1.0/*`) for backward compatibility
+- **Pagination**: Server-side pagination with configurable page size (default: 10, max: 100)
+  - PagedResult response includes `items`, `currentPage`, `totalPages`, `totalCount`, `hasPreviousPage`, `hasNextPage`
+  - Frontend pagination UI with page selector and page size dropdown
+- **AutoMapper Integration**: Automatic mapping between entities and DTOs
+- **Global Exception Handling**: RFC 7807 Problem Details for consistent error responses
+- **Response Caching**: In-memory caching (5-minute expiration for tags endpoint)
+- **Soft Delete**: Logical deletion with `IsDeleted` and `DeletedAt` fields, global query filter
+- **Query Optimization**: `AsNoTracking()` for read-only operations, split queries for better performance
+- **CORS Configuration**: Environment-variable based CORS origins for flexible deployment
+- **Structured Logging**: Serilog with console and file outputs
+- **XML Documentation**: Comprehensive API documentation in Swagger UI
+
 ### Task Management
 - **Create Tasks**: Add new tasks with all required fields and validations
 - **View Tasks**: Display all tasks with color-coded priorities and status
@@ -372,10 +431,11 @@ SUPERCOM TEST/
 
 ### Windows Service Features
 - **Automatic Overdue Detection**: Checks for overdue tasks every 5 minutes
-- **RabbitMQ Integration**: Publishes reminder messages to a durable queue
+- **RabbitMQ Integration**: Publishes reminder messages to a durable queue with dead letter exchange
+- **Dead Letter Queue**: 3-retry logic with exponential backoff for failed messages
 - **Message Consumption**: Subscribes to the queue and logs reminder messages
 - **Concurrent Updates**: Handles multiple task updates safely through queue-based processing
-- **Error Handling**: Robust error handling with logging
+- **Error Handling**: Robust error handling with structured logging
 
 ### State Management
 - **Redux Toolkit**: Modern Redux with simplified setup
@@ -388,25 +448,27 @@ SUPERCOM TEST/
 
 ## API Endpoints
 
+All endpoints are versioned with `/api/v1.0/` prefix.
+
 ### Tasks
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/tasks` | Get all tasks |
-| GET | `/api/tasks/{id}` | Get task by ID |
-| POST | `/api/tasks` | Create a new task |
-| PUT | `/api/tasks/{id}` | Update a task |
-| DELETE | `/api/tasks/{id}` | Delete a task |
+| GET | `/api/v1.0/tasks?page=1&pageSize=10` | Get paginated tasks |
+| GET | `/api/v1.0/tasks/{id}` | Get task by ID |
+| POST | `/api/v1.0/tasks` | Create a new task |
+| PUT | `/api/v1.0/tasks/{id}` | Update a task |
+| DELETE | `/api/v1.0/tasks/{id}` | Soft delete a task |
 
 ### Tags
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/tags` | Get all tags |
-| GET | `/api/tags/{id}` | Get tag by ID |
-| POST | `/api/tags` | Create a new tag |
-| PUT | `/api/tags/{id}` | Update a tag |
-| DELETE | `/api/tags/{id}` | Delete a tag |
+| GET | `/api/v1.0/tags` | Get all tags (cached for 5 minutes) |
+| GET | `/api/v1.0/tags/{id}` | Get tag by ID |
+| POST | `/api/v1.0/tags` | Create a new tag |
+| PUT | `/api/v1.0/tags/{id}` | Update a tag |
+| DELETE | `/api/v1.0/tags/{id}` | Soft delete a tag |
 
 ### Example Request - Create Task
 
@@ -431,16 +493,20 @@ POST /api/tasks
 - `Title` (nvarchar(200)): Task title
 - `Description` (nvarchar(2000)): Task description
 - `DueDate` (datetime2): Due date and time
-- `Priority` (int): Priority level (1-5)
+- `Priority` (int): Priority level (1-5: VeryLow, Low, Medium, High, Critical)
 - `FullName` (nvarchar(100)): User's full name
 - `Telephone` (nvarchar(20)): User's phone number
 - `Email` (nvarchar(100)): User's email address
 - `CreatedAt` (datetime2): Creation timestamp
 - `UpdatedAt` (datetime2, nullable): Last update timestamp
+- `IsDeleted` (bit): Soft delete flag (default: false)
+- `DeletedAt` (datetime2, nullable): Deletion timestamp
 
 ### Tags Table
 - `Id` (int, PK): Primary key
 - `Name` (nvarchar(50), unique): Tag name
+- `IsDeleted` (bit): Soft delete flag (default: false)
+- `DeletedAt` (datetime2, nullable): Deletion timestamp
 
 ### TaskItemTags Table (Junction Table)
 - `TaskItemId` (int, PK, FK): Foreign key to TaskItems

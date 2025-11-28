@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using TaskManagement.Core.Enums;
 
 namespace TaskManagement.Core.DTOs
 {
@@ -20,8 +21,7 @@ namespace TaskManagement.Core.DTOs
         public DateTime DueDate { get; set; }
 
         [Required(ErrorMessage = "Priority is required")]
-        [Range(1, 5, ErrorMessage = "Priority must be between 1 and 5")]
-        public int Priority { get; set; }
+        public TaskPriority Priority { get; set; }
 
         [Required(ErrorMessage = "Full name is required")]
         [StringLength(100, ErrorMessage = "Full name cannot exceed 100 characters")]

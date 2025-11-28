@@ -219,7 +219,7 @@ const TaskForm = ({ open, onClose, task, tags }: TaskFormProps) => {
         <DialogTitle>{task ? 'Edit Task' : 'Create New Task'}</DialogTitle>
         <DialogContent>
           {error && (
-            <Alert severity="error" onClose={() => dispatch(clearError())} sx={{ mb: 2 }}>
+            <Alert severity="error" onClose={() => dispatch(clearError())} className={styles.alert}>
               {error}
             </Alert>
           )}

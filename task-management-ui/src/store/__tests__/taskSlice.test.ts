@@ -53,6 +53,12 @@ describe('Task Slice', () => {
       loading: false,
       error: null,
       isCreating: false,
+      currentPage: 1,
+      pageSize: 10,
+      totalCount: 0,
+      totalPages: 0,
+      hasPreviousPage: false,
+      hasNextPage: false,
     });
   });
 
@@ -104,10 +110,22 @@ describe('Task Slice', () => {
       },
     });
 
-    store.dispatch(loadTasks.fulfilled(mockTasks, '', undefined));
+    const pagedResponse = {
+      items: mockTasks,
+      currentPage: 1,
+      totalPages: 1,
+      pageSize: 10,
+      totalCount: 1,
+      hasPreviousPage: false,
+      hasNextPage: false,
+    };
+
+    store.dispatch(loadTasks.fulfilled(pagedResponse, '', undefined));
 
     expect(store.getState().tasks.tasks).toEqual(mockTasks);
     expect(store.getState().tasks.loading).toBe(false);
+    expect(store.getState().tasks.currentPage).toBe(1);
+    expect(store.getState().tasks.totalPages).toBe(1);
   });
 
   it('should handle loadTasks rejected state', () => {

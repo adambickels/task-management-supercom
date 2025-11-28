@@ -1,47 +1,99 @@
 using Microsoft.AspNetCore.Mvc;
+using AutoMapper;
 using TaskManagement.Core.DTOs;
 using TaskManagement.Core.Entities;
 using TaskManagement.Core.Interfaces;
+using TaskManagement.Core.Models;
+using Asp.Versioning;
 
 namespace TaskManagement.API.Controllers
 {
+    /// <summary>
+    /// Controller for managing tasks
+    /// </summary>
     [ApiController]
-    [Route("api/[controller]")]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     public class TasksController : ControllerBase
     {
         private readonly ITaskItemRepository _taskRepository;
         private readonly ITagRepository _tagRepository;
         private readonly ILogger<TasksController> _logger;
+        private readonly IMapper _mapper;
+        private readonly IConfiguration _configuration;
 
         public TasksController(
             ITaskItemRepository taskRepository,
             ITagRepository tagRepository,
-            ILogger<TasksController> logger)
+            ILogger<TasksController> logger,
+            IMapper mapper,
+            IConfiguration configuration)
         {
             _taskRepository = taskRepository;
             _tagRepository = tagRepository;
             _logger = logger;
+            _mapper = mapper;
+            _configuration = configuration;
         }
 
-        // GET: api/tasks
+        /// <summary>
+        /// Get all tasks (paginated)
+        /// </summary>
+        /// <param name="page">Page number (default: 1)</param>
+        /// <param name="pageSize">Number of items per page (default: 10, max: 100)</param>
+        /// <returns>Paginated list of tasks</returns>
+        /// <response code="200">Returns the paginated list of tasks</response>
+        /// <response code="500">If an error occurs while retrieving tasks</response>
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<TaskItemDto>>> GetAllTasks()
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<PagedResult<TaskItemDto>>> GetAllTasks(
+            [FromQuery] int page = 1, 
+            [FromQuery] int? pageSize = null)
         {
             try
             {
-                var tasks = await _taskRepository.GetAllAsync();
-                var taskDtos = tasks.Select(MapToDto);
-                return Ok(taskDtos);
+                // Get pagination settings from configuration
+                var defaultPageSize = _configuration.GetValue<int>("Pagination:DefaultPageSize", 10);
+                var maxPageSize = _configuration.GetValue<int>("Pagination:MaxPageSize", 100);
+                
+                // Validate pagination parameters
+                if (page < 1) page = 1;
+                if (!pageSize.HasValue || pageSize < 1) pageSize = defaultPageSize;
+                if (pageSize > maxPageSize) pageSize = maxPageSize;
+
+                var pagedTasks = await _taskRepository.GetPagedAsync(page, pageSize.Value);
+                var taskDtos = _mapper.Map<IEnumerable<TaskItemDto>>(pagedTasks.Items);
+
+                var result = new PagedResult<TaskItemDto>
+                {
+                    Items = taskDtos,
+                    CurrentPage = pagedTasks.CurrentPage,
+                    PageSize = pagedTasks.PageSize,
+                    TotalCount = pagedTasks.TotalCount
+                };
+
+                return Ok(result);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving all tasks");
-                return StatusCode(500, "An error occurred while retrieving tasks");
+                throw; // Let global exception handler deal with it
             }
         }
 
-        // GET: api/tasks/5
+        /// <summary>
+        /// Get a specific task by ID
+        /// </summary>
+        /// <param name="id">The task ID</param>
+        /// <returns>The task details</returns>
+        /// <response code="200">Returns the task</response>
+        /// <response code="404">If the task is not found</response>
+        /// <response code="500">If an error occurs while retrieving the task</response>
         [HttpGet("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<TaskItemDto>> GetTask(int id)
         {
             try
@@ -52,17 +104,28 @@ namespace TaskManagement.API.Controllers
                     return NotFound($"Task with ID {id} not found");
                 }
 
-                return Ok(MapToDto(task));
+                var taskDto = _mapper.Map<TaskItemDto>(task);
+                return Ok(taskDto);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving task with ID {TaskId}", id);
-                return StatusCode(500, "An error occurred while retrieving the task");
+                throw;
             }
         }
 
-        // POST: api/tasks
+        /// <summary>
+        /// Create a new task
+        /// </summary>
+        /// <param name="taskDto">The task data</param>
+        /// <returns>The created task</returns>
+        /// <response code="201">Returns the newly created task</response>
+        /// <response code="400">If the task data is invalid</response>
+        /// <response code="500">If an error occurs while creating the task</response>
         [HttpPost]
+        [ProducesResponseType(StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<TaskItemDto>> CreateTask([FromBody] TaskItemDto taskDto)
         {
             try
@@ -79,21 +142,39 @@ namespace TaskManagement.API.Controllers
                     return BadRequest("One or more tag IDs are invalid");
                 }
 
-                var taskItem = MapToEntity(taskDto);
-                var createdTask = await _taskRepository.CreateAsync(taskItem);
-                var createdDto = MapToDto(createdTask);
+                var taskItem = _mapper.Map<TaskItem>(taskDto);
+                taskItem.TaskItemTags = taskDto.TagIds.Select(tagId => new TaskItemTag
+                {
+                    TagId = tagId
+                }).ToList();
 
-                return CreatedAtAction(nameof(GetTask), new { id = createdDto.Id }, createdDto);
+                var createdTask = await _taskRepository.CreateAsync(taskItem);
+                var createdDto = _mapper.Map<TaskItemDto>(createdTask);
+
+                return CreatedAtAction(nameof(GetTask), new { version = "1.0", id = createdDto.Id }, createdDto);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating task");
-                return StatusCode(500, "An error occurred while creating the task");
+                throw;
             }
         }
 
-        // PUT: api/tasks/5
+        /// <summary>
+        /// Update an existing task
+        /// </summary>
+        /// <param name="id">The task ID</param>
+        /// <param name="taskDto">The updated task data</param>
+        /// <returns>The updated task</returns>
+        /// <response code="200">Returns the updated task</response>
+        /// <response code="400">If the task data is invalid or IDs don't match</response>
+        /// <response code="404">If the task is not found</response>
+        /// <response code="500">If an error occurs while updating the task</response>
         [HttpPut("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<TaskItemDto>> UpdateTask(int id, [FromBody] TaskItemDto taskDto)
         {
             try
@@ -121,21 +202,36 @@ namespace TaskManagement.API.Controllers
                     return BadRequest("One or more tag IDs are invalid");
                 }
 
-                var taskItem = MapToEntity(taskDto);
+                var taskItem = _mapper.Map<TaskItem>(taskDto);
+                taskItem.TaskItemTags = taskDto.TagIds.Select(tagId => new TaskItemTag
+                {
+                    TagId = tagId
+                }).ToList();
+
                 var updatedTask = await _taskRepository.UpdateAsync(taskItem);
-                var updatedDto = MapToDto(updatedTask);
+                var updatedDto = _mapper.Map<TaskItemDto>(updatedTask);
 
                 return Ok(updatedDto);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error updating task with ID {TaskId}", id);
-                return StatusCode(500, "An error occurred while updating the task");
+                throw;
             }
         }
 
-        // DELETE: api/tasks/5
+        /// <summary>
+        /// Delete a task (soft delete)
+        /// </summary>
+        /// <param name="id">The task ID</param>
+        /// <returns>No content</returns>
+        /// <response code="204">If the task was successfully deleted</response>
+        /// <response code="404">If the task is not found</response>
+        /// <response code="500">If an error occurs while deleting the task</response>
         [HttpDelete("{id}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult> DeleteTask(int id)
         {
             try
@@ -151,50 +247,8 @@ namespace TaskManagement.API.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting task with ID {TaskId}", id);
-                return StatusCode(500, "An error occurred while deleting the task");
+                throw;
             }
-        }
-
-        private TaskItemDto MapToDto(TaskItem task)
-        {
-            return new TaskItemDto
-            {
-                Id = task.Id,
-                Title = task.Title,
-                Description = task.Description,
-                DueDate = task.DueDate,
-                Priority = task.Priority,
-                FullName = task.FullName,
-                Telephone = task.Telephone,
-                Email = task.Email,
-                CreatedAt = task.CreatedAt,
-                UpdatedAt = task.UpdatedAt,
-                TagIds = task.TaskItemTags.Select(tt => tt.TagId).ToList(),
-                Tags = task.TaskItemTags.Select(tt => new TagDto
-                {
-                    Id = tt.Tag.Id,
-                    Name = tt.Tag.Name
-                }).ToList()
-            };
-        }
-
-        private TaskItem MapToEntity(TaskItemDto dto)
-        {
-            return new TaskItem
-            {
-                Id = dto.Id,
-                Title = dto.Title,
-                Description = dto.Description,
-                DueDate = dto.DueDate,
-                Priority = dto.Priority,
-                FullName = dto.FullName,
-                Telephone = dto.Telephone,
-                Email = dto.Email,
-                TaskItemTags = dto.TagIds.Select(tagId => new TaskItemTag
-                {
-                    TagId = tagId
-                }).ToList()
-            };
         }
     }
 }

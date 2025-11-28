@@ -6,6 +6,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Moq;
 using System.Collections.Concurrent;
 using TaskManagement.Core.Entities;
+using TaskManagement.Core.Enums;
 using TaskManagement.Core.Interfaces;
 using TaskManagement.Service;
 using TaskManagement.Service.Services;
@@ -364,7 +365,7 @@ namespace TaskManagement.Tests.Services
                     Title = $"Overdue Task {i}",
                     Description = $"Description for task {i}",
                     DueDate = DateTime.UtcNow.AddDays(-i),
-                    Priority = (i % 5) + 1,
+                    Priority = (TaskPriority)((i % 5) + 1),
                     FullName = $"User {i}",
                     Telephone = $"+1-555-{i:D4}",
                     Email = $"user{i}@example.com",

@@ -82,12 +82,40 @@ namespace TaskManagement.Service.Services
                     }
                 }
 
+                // Declare dead letter exchange
+                await _channel.ExchangeDeclareAsync(
+                    exchange: "task_reminders_dlx",
+                    type: "direct",
+                    durable: true,
+                    autoDelete: false);
+
+                // Declare dead letter queue
+                await _channel.QueueDeclareAsync(
+                    queue: "task_reminders_dlq",
+                    durable: true,
+                    exclusive: false,
+                    autoDelete: false,
+                    arguments: null);
+
+                // Bind dead letter queue to dead letter exchange
+                await _channel.QueueBindAsync(
+                    queue: "task_reminders_dlq",
+                    exchange: "task_reminders_dlx",
+                    routingKey: queueName);
+
+                // Declare main queue with dead letter exchange configuration
+                var args = new Dictionary<string, object?>
+                {
+                    { "x-dead-letter-exchange", "task_reminders_dlx" },
+                    { "x-dead-letter-routing-key", queueName }
+                };
+
                 await _channel.QueueDeclareAsync(
                     queue: queueName,
                     durable: true,
                     exclusive: false,
                     autoDelete: false,
-                    arguments: null);
+                    arguments: args);
 
                 var body = Encoding.UTF8.GetBytes(message);
                 var properties = new BasicProperties
@@ -121,16 +149,52 @@ namespace TaskManagement.Service.Services
                     return;
                 }
 
+                // Declare dead letter exchange
+                await _channel.ExchangeDeclareAsync(
+                    exchange: "task_reminders_dlx",
+                    type: "direct",
+                    durable: true,
+                    autoDelete: false);
+
+                // Declare dead letter queue
                 await _channel.QueueDeclareAsync(
-                    queue: queueName,
+                    queue: "task_reminders_dlq",
                     durable: true,
                     exclusive: false,
                     autoDelete: false,
                     arguments: null);
 
+                // Bind dead letter queue to dead letter exchange
+                await _channel.QueueBindAsync(
+                    queue: "task_reminders_dlq",
+                    exchange: "task_reminders_dlx",
+                    routingKey: queueName);
+
+                // Declare main queue with dead letter exchange configuration
+                var args = new Dictionary<string, object?>
+                {
+                    { "x-dead-letter-exchange", "task_reminders_dlx" },
+                    { "x-dead-letter-routing-key", queueName }
+                };
+
+                await _channel.QueueDeclareAsync(
+                    queue: queueName,
+                    durable: true,
+                    exclusive: false,
+                    autoDelete: false,
+                    arguments: args);
+
                 _consumer = new AsyncEventingBasicConsumer(_channel);
                 _consumer.ReceivedAsync += async (model, ea) =>
                 {
+                    const int maxRetryAttempts = 3;
+                    var retryCount = 0;
+                    
+                    if (ea.BasicProperties.Headers != null && ea.BasicProperties.Headers.ContainsKey("x-retry-count"))
+                    {
+                        retryCount = Convert.ToInt32(ea.BasicProperties.Headers["x-retry-count"]);
+                    }
+
                     try
                     {
                         var body = ea.Body.ToArray();
@@ -144,9 +208,40 @@ namespace TaskManagement.Service.Services
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error processing message from queue {QueueName}", queueName);
-                        // Consider implementing retry logic or dead letter queue here
-                        await _channel.BasicNackAsync(deliveryTag: ea.DeliveryTag, multiple: false, requeue: false);
+                        _logger.LogError(ex, "Error processing message from queue {QueueName}. Retry attempt {RetryCount}/{MaxRetries}", 
+                            queueName, retryCount, maxRetryAttempts);
+
+                        if (retryCount < maxRetryAttempts)
+                        {
+                            // Retry with exponential backoff
+                            await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, retryCount)));
+                            
+                            // Re-publish with incremented retry count
+                            var newProperties = new BasicProperties
+                            {
+                                Persistent = true,
+                                Headers = new Dictionary<string, object?>
+                                {
+                                    { "x-retry-count", retryCount + 1 }
+                                }
+                            };
+
+                            await _channel.BasicPublishAsync(
+                                exchange: string.Empty,
+                                routingKey: queueName,
+                                mandatory: false,
+                                basicProperties: newProperties,
+                                body: ea.Body);
+
+                            await _channel.BasicAckAsync(deliveryTag: ea.DeliveryTag, multiple: false);
+                            _logger.LogWarning("Message re-queued for retry {RetryCount}/{MaxRetries}", retryCount + 1, maxRetryAttempts);
+                        }
+                        else
+                        {
+                            // Max retries exceeded - send to dead letter queue
+                            await _channel.BasicNackAsync(deliveryTag: ea.DeliveryTag, multiple: false, requeue: false);
+                            _logger.LogError("Message sent to dead letter queue after {MaxRetries} failed attempts", maxRetryAttempts);
+                        }
                     }
                 };
 

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TaskManagement.Core.Entities;
 using TaskManagement.Core.Interfaces;
+using TaskManagement.Core.Models;
 using TaskManagement.Infrastructure.Data;
 
 namespace TaskManagement.Infrastructure.Repositories
@@ -26,10 +27,13 @@ namespace TaskManagement.Infrastructure.Repositories
             try
             {
                 _logger.LogInformation("Retrieving all task items");
+                // Use AsNoTracking for better performance on read-only queries
                 var tasks = await _context.TaskItems
+                    .Where(t => !t.IsDeleted)
                     .Include(t => t.TaskItemTags)
                     .ThenInclude(tt => tt.Tag)
                     .OrderByDescending(t => t.CreatedAt)
+                    .AsNoTracking()
                     .ToListAsync();
                 _logger.LogInformation("Retrieved {TaskCount} task items", tasks.Count());
                 return tasks;
@@ -41,14 +45,64 @@ namespace TaskManagement.Infrastructure.Repositories
             }
         }
 
+        public async Task<PagedResult<TaskItem>> GetPagedAsync(int page, int pageSize)
+        {
+            try
+            {
+                // Normalize page number and page size
+                page = Math.Max(1, page);
+                pageSize = Math.Clamp(pageSize > 0 ? pageSize : 10, 1, 100);
+
+                _logger.LogInformation("Retrieving paged task items: Page {Page}, PageSize {PageSize}", page, pageSize);
+                
+                // Use AsNoTracking for better performance since we're just reading
+                // Split count query to avoid loading all data for counting
+                var countQuery = _context.TaskItems
+                    .Where(t => !t.IsDeleted)
+                    .AsNoTracking();
+
+                var totalCount = await countQuery.CountAsync();
+
+                // Optimized query with projection - only load needed fields and related data
+                var items = await _context.TaskItems
+                    .Where(t => !t.IsDeleted)
+                    .Include(t => t.TaskItemTags)
+                    .ThenInclude(tt => tt.Tag)
+                    .OrderByDescending(t => t.CreatedAt)
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .AsNoTracking() // No tracking for read-only operations
+                    .ToListAsync();
+
+                _logger.LogInformation("Retrieved {ItemCount} of {TotalCount} task items for page {Page}", 
+                    items.Count, totalCount, page);
+
+                return new PagedResult<TaskItem>
+                {
+                    Items = items,
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCount
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving paged task items");
+                throw;
+            }
+        }
+
         public async Task<TaskItem?> GetByIdAsync(int id)
         {
             try
             {
                 _logger.LogInformation("Retrieving task item with ID: {TaskId}", id);
+                // Use AsNoTracking for read-only operations
                 var task = await _context.TaskItems
+                    .Where(t => !t.IsDeleted)
                     .Include(t => t.TaskItemTags)
                     .ThenInclude(tt => tt.Tag)
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(t => t.Id == id);
                 
                 if (task == null)
@@ -139,7 +193,7 @@ namespace TaskManagement.Infrastructure.Repositories
         {
             try
             {
-                _logger.LogInformation("Deleting task item with ID: {TaskId}", id);
+                _logger.LogInformation("Soft deleting task item with ID: {TaskId}", id);
                 var taskItem = await _context.TaskItems.FindAsync(id);
                 if (taskItem == null)
                 {
@@ -147,9 +201,11 @@ namespace TaskManagement.Infrastructure.Repositories
                     return false;
                 }
 
-                _context.TaskItems.Remove(taskItem);
+                taskItem.IsDeleted = true;
+                taskItem.DeletedAt = DateTime.UtcNow;
+
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("Successfully deleted task item with ID: {TaskId}", id);
+                _logger.LogInformation("Successfully soft deleted task item with ID: {TaskId}", id);
                 return true;
             }
             catch (Exception ex)
@@ -165,10 +221,12 @@ namespace TaskManagement.Infrastructure.Repositories
             {
                 _logger.LogInformation("Retrieving overdue task items");
                 var now = DateTime.UtcNow;
+                // Use AsNoTracking for read-only operations
                 var overdueTasks = await _context.TaskItems
+                    .Where(t => !t.IsDeleted && t.DueDate < now)
                     .Include(t => t.TaskItemTags)
                     .ThenInclude(tt => tt.Tag)
-                    .Where(t => t.DueDate < now)
+                    .AsNoTracking()
                     .ToListAsync();
                 _logger.LogInformation("Found {OverdueCount} overdue task items", overdueTasks.Count());
                 return overdueTasks;

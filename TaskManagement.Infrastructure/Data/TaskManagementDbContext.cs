@@ -31,6 +31,9 @@ namespace TaskManagement.Infrastructure.Data
                 entity.Property(e => e.Priority).IsRequired();
                 entity.Property(e => e.DueDate).IsRequired();
                 entity.Property(e => e.CreatedAt).IsRequired();
+
+                // Global query filter for soft delete
+                entity.HasQueryFilter(t => !t.IsDeleted);
             });
 
             // Configure Tag entity

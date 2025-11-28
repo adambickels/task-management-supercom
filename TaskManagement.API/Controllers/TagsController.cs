@@ -1,46 +1,64 @@
 using Microsoft.AspNetCore.Mvc;
+using AutoMapper;
 using TaskManagement.Core.DTOs;
 using TaskManagement.Core.Entities;
 using TaskManagement.Core.Interfaces;
+using Asp.Versioning;
 
 namespace TaskManagement.API.Controllers
 {
+    /// <summary>
+    /// Controller for managing tags
+    /// </summary>
     [ApiController]
-    [Route("api/[controller]")]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     public class TagsController : ControllerBase
     {
         private readonly ITagRepository _tagRepository;
         private readonly ILogger<TagsController> _logger;
+        private readonly IMapper _mapper;
 
-        public TagsController(ITagRepository tagRepository, ILogger<TagsController> logger)
+        public TagsController(ITagRepository tagRepository, ILogger<TagsController> logger, IMapper mapper)
         {
             _tagRepository = tagRepository;
             _logger = logger;
+            _mapper = mapper;
         }
 
-        // GET: api/tags
+        /// <summary>
+        /// Get all tags
+        /// </summary>
+        /// <returns>List of all tags</returns>
+        /// <response code="200">Returns the list of tags</response>
         [HttpGet]
+        [ResponseCache(Duration = 300)] // Cache for 5 minutes
+        [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<ActionResult<IEnumerable<TagDto>>> GetAllTags()
         {
             try
             {
                 var tags = await _tagRepository.GetAllAsync();
-                var tagDtos = tags.Select(t => new TagDto
-                {
-                    Id = t.Id,
-                    Name = t.Name
-                });
+                var tagDtos = _mapper.Map<IEnumerable<TagDto>>(tags);
                 return Ok(tagDtos);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving all tags");
-                return StatusCode(500, "An error occurred while retrieving tags");
+                throw;
             }
         }
 
-        // GET: api/tags/5
+        /// <summary>
+        /// Get a specific tag by ID
+        /// </summary>
+        /// <param name="id">The tag ID</param>
+        /// <returns>The tag details</returns>
+        /// <response code="200">Returns the tag</response>
+        /// <response code="404">If the tag is not found</response>
         [HttpGet("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<TagDto>> GetTag(int id)
         {
             try
@@ -51,17 +69,26 @@ namespace TaskManagement.API.Controllers
                     return NotFound($"Tag with ID {id} not found");
                 }
 
-                return Ok(new TagDto { Id = tag.Id, Name = tag.Name });
+                var tagDto = _mapper.Map<TagDto>(tag);
+                return Ok(tagDto);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving tag with ID {TagId}", id);
-                return StatusCode(500, "An error occurred while retrieving the tag");
+                throw;
             }
         }
 
-        // POST: api/tags
+        /// <summary>
+        /// Create a new tag
+        /// </summary>
+        /// <param name="tagDto">The tag data</param>
+        /// <returns>The created tag</returns>
+        /// <response code="201">Returns the newly created tag</response>
+        /// <response code="400">If the tag data is invalid</response>
         [HttpPost]
+        [ProducesResponseType(StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<TagDto>> CreateTag([FromBody] TagDto tagDto)
         {
             try
@@ -71,21 +98,32 @@ namespace TaskManagement.API.Controllers
                     return BadRequest(ModelState);
                 }
 
-                var tag = new Tag { Name = tagDto.Name };
+                var tag = _mapper.Map<Tag>(tagDto);
                 var createdTag = await _tagRepository.CreateAsync(tag);
-                var createdDto = new TagDto { Id = createdTag.Id, Name = createdTag.Name };
+                var createdDto = _mapper.Map<TagDto>(createdTag);
 
-                return CreatedAtAction(nameof(GetTag), new { id = createdDto.Id }, createdDto);
+                return CreatedAtAction(nameof(GetTag), new { version = "1.0", id = createdDto.Id }, createdDto);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating tag");
-                return StatusCode(500, "An error occurred while creating the tag");
+                throw;
             }
         }
 
-        // PUT: api/tags/5
+        /// <summary>
+        /// Update an existing tag
+        /// </summary>
+        /// <param name="id">The tag ID</param>
+        /// <param name="tagDto">The updated tag data</param>
+        /// <returns>The updated tag</returns>
+        /// <response code="200">Returns the updated tag</response>
+        /// <response code="400">If the tag data is invalid or IDs don't match</response>
+        /// <response code="404">If the tag is not found</response>
         [HttpPut("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<TagDto>> UpdateTag(int id, [FromBody] TagDto tagDto)
         {
             try
@@ -108,19 +146,27 @@ namespace TaskManagement.API.Controllers
 
                 existingTag.Name = tagDto.Name;
                 var updatedTag = await _tagRepository.UpdateAsync(existingTag);
-                var updatedDto = new TagDto { Id = updatedTag.Id, Name = updatedTag.Name };
+                var updatedDto = _mapper.Map<TagDto>(updatedTag);
 
                 return Ok(updatedDto);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error updating tag with ID {TagId}", id);
-                return StatusCode(500, "An error occurred while updating the tag");
+                throw;
             }
         }
 
-        // DELETE: api/tags/5
+        /// <summary>
+        /// Delete a tag
+        /// </summary>
+        /// <param name="id">The tag ID</param>
+        /// <returns>No content</returns>
+        /// <response code="204">If the tag was successfully deleted</response>
+        /// <response code="404">If the tag is not found</response>
         [HttpDelete("{id}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult> DeleteTag(int id)
         {
             try
@@ -136,7 +182,7 @@ namespace TaskManagement.API.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting tag with ID {TagId}", id);
-                return StatusCode(500, "An error occurred while deleting the tag");
+                throw;
             }
         }
     }

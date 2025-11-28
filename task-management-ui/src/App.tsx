@@ -6,6 +6,7 @@ import {
   Button,
   Alert,
   CircularProgress,
+  Pagination,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import TaskList from './components/TaskList';
@@ -20,7 +21,14 @@ const App = () => {
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
   
   const dispatch = useAppDispatch();
-  const { tasks, tags, loading, error } = useAppSelector((state) => state.tasks);
+  const { 
+    tasks, 
+    tags, 
+    loading, 
+    error, 
+    currentPage, 
+    totalPages
+  } = useAppSelector((state) => state.tasks);
 
   useEffect(() => {
     dispatch(loadTasks());
@@ -53,6 +61,10 @@ const App = () => {
     }
   };
 
+  const handlePageChange = (_event: React.ChangeEvent<unknown>, page: number) => {
+    dispatch(loadTasks({ page }));
+  };
+
   return (
     <Container maxWidth="lg" className={styles.container}>
       <Box className={styles.header}>
@@ -60,7 +72,7 @@ const App = () => {
           <Typography variant="h3" component="h1" className={styles.title}>
             Task Management
           </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+          <Typography variant="caption" color="text.secondary" className={styles.subtitle}>
             Full-Stack Developer Assignment for SUPERCOM • Adam Bickels
           </Typography>
         </Box>
@@ -85,11 +97,28 @@ const App = () => {
           <CircularProgress />
         </Box>
       ) : (
-        <TaskList
-          tasks={tasks}
-          onEdit={handleOpen}
-          onDelete={handleDelete}
-        />
+        <>
+          <TaskList
+            tasks={tasks}
+            onEdit={handleOpen}
+            onDelete={handleDelete}
+          />
+          
+          {totalPages > 1 && (
+            <Box className={styles.paginationContainer}>
+              <Pagination
+                count={totalPages}
+                page={currentPage}
+                onChange={handlePageChange}
+                color="primary"
+                size="large"
+                showFirstButton
+                showLastButton
+                disabled={loading}
+              />
+            </Box>
+          )}
+        </>
       )}
 
       <TaskForm

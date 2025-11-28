@@ -14,6 +14,11 @@
   margin-bottom: 0;
 }
 
+.subtitle {
+  display: block;
+  margin-top: 0.5rem;
+}
+
 .alert {
   margin-bottom: 1rem;
 }
@@ -23,4 +28,10 @@
   justify-content: center;
   padding-top: 4rem;
   padding-bottom: 4rem;
+}
+
+.paginationContainer {
+  display: flex;
+  justify-content: center;
+  margin-top: 4rem;
 }

@@ -26,8 +26,10 @@ namespace TaskManagement.Infrastructure.Repositories
             try
             {
                 _logger.LogInformation("Retrieving all tags");
+                // Use AsNoTracking for read-only operations
                 var tags = await _context.Tags
                     .OrderBy(t => t.Name)
+                    .AsNoTracking()
                     .ToListAsync();
                 _logger.LogInformation("Retrieved {TagCount} tags", tags.Count());
                 return tags;

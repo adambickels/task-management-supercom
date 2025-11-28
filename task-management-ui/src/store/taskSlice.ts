@@ -9,7 +9,15 @@ interface TaskState {
   loading: boolean;
   error: string | null;
   isCreating: boolean;
+  currentPage: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
 }
+
+const DEFAULT_PAGE_SIZE = Number(import.meta.env.VITE_DEFAULT_PAGE_SIZE) || 10;
 
 const initialState: TaskState = {
   tasks: [],
@@ -18,13 +26,25 @@ const initialState: TaskState = {
   loading: false,
   error: null,
   isCreating: false,
+  currentPage: 1,
+  pageSize: DEFAULT_PAGE_SIZE,
+  totalCount: 0,
+  totalPages: 0,
+  hasPreviousPage: false,
+  hasNextPage: false,
 };
 
 // Async thunks
-export const loadTasks = createAsyncThunk('tasks/loadTasks', async () => {
-  const tasks = await taskApi.getAllTasks();
-  return tasks;
-});
+export const loadTasks = createAsyncThunk(
+  'tasks/loadTasks',
+  async (params: { page?: number; pageSize?: number } | undefined, { getState }) => {
+    const state = getState() as { tasks: TaskState };
+    const page = params?.page ?? state.tasks.currentPage;
+    const pageSize = params?.pageSize ?? state.tasks.pageSize;
+    const result = await taskApi.getAllTasks(page, pageSize);
+    return result;
+  }
+);
 
 export const loadTags = createAsyncThunk('tasks/loadTags', async () => {
   const tags = await tagApi.getAllTags();
@@ -78,6 +98,9 @@ const taskSlice = createSlice({
     clearError: (state) => {
       state.error = null;
     },
+    setPage: (state, action: PayloadAction<number>) => {
+      state.currentPage = action.payload;
+    },
   },
   extraReducers: (builder) => {
     // Load Tasks
@@ -87,7 +110,13 @@ const taskSlice = createSlice({
         state.error = null;
       })
       .addCase(loadTasks.fulfilled, (state, action) => {
-        state.tasks = action.payload;
+        state.tasks = action.payload.items;
+        state.currentPage = action.payload.currentPage;
+        state.pageSize = action.payload.pageSize;
+        state.totalCount = action.payload.totalCount;
+        state.totalPages = action.payload.totalPages;
+        state.hasPreviousPage = action.payload.hasPreviousPage;
+        state.hasNextPage = action.payload.hasNextPage;
         state.loading = false;
       })
       .addCase(loadTasks.rejected, (state, action) => {
@@ -176,5 +205,5 @@ const taskSlice = createSlice({
   },
 });
 
-export const { setSelectedTask, clearError } = taskSlice.actions;
+export const { setSelectedTask, clearError, setPage } = taskSlice.actions;
 export default taskSlice.reducer;
