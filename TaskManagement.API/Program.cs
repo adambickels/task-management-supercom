@@ -73,6 +73,39 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Automatic database migration (Code First approach)
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<TaskManagementDbContext>();
+        
+        // Check if database exists
+        if (context.Database.GetPendingMigrations().Any())
+        {
+            Log.Information("Pending migrations found. Applying database migrations...");
+            context.Database.Migrate();
+            Log.Information("Database migrations applied successfully");
+        }
+        else if (!context.Database.CanConnect())
+        {
+            Log.Information("Database does not exist. Creating database and applying migrations...");
+            context.Database.Migrate();
+            Log.Information("Database created and migrations applied successfully");
+        }
+        else
+        {
+            Log.Information("Database is up to date. No migrations needed.");
+        }
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "An error occurred while migrating the database");
+        throw;
+    }
+}
+
 // Use global exception handler
 app.UseGlobalExceptionHandler();
 

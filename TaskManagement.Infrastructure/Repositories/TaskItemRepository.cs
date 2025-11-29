@@ -220,7 +220,7 @@ namespace TaskManagement.Infrastructure.Repositories
             try
             {
                 _logger.LogInformation("Retrieving overdue task items");
-                var now = DateTime.UtcNow;
+                var now = DateTime.Now; // Use local time to match the stored due dates
                 // Use AsNoTracking for read-only operations
                 var overdueTasks = await _context.TaskItems
                     .Where(t => !t.IsDeleted && t.DueDate < now)

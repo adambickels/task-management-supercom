@@ -39,24 +39,26 @@ Before running this application, ensure you have the following installed:
 **The fastest way to run the application using PowerShell scripts:**
 
 ```powershell
-# 1. Setup: Install dependencies and apply migrations (run once)
+# 1. Setup: Install dependencies and create migrations (run once)
+#    This script automatically:
+#    - Restores NuGet packages
+#    - Builds the solution
+#    - Creates Entity Framework migrations (Code First approach)
+#    - Installs frontend dependencies
+#    NOTE: Database is NOT created yet - it will be created automatically when you start the API
 .\setup.ps1
 
-# 2. Start the API (in terminal 1)
+# 2. Start the API (database will be created automatically on first run)
 .\start-api.ps1
 
-# 3. Start the Windows Service (in terminal 2)
+# 3. Start the Windows Service (in a new terminal)
 .\start-service.ps1
 
-# 4. Start the Frontend (in terminal 3)
+# 4. Start the Frontend (in a new terminal)
 .\start-frontend.ps1
 ```
 
-**Access the application:**
-- **Frontend**: http://localhost:5173
-- **API**: http://localhost:5119
-- **Swagger UI**: http://localhost:5119/swagger
-- **RabbitMQ Management**: http://localhost:15672 (guest/guest)
+> **Note for Testers:** Run `.\setup.ps1` once to prepare everything, then start the three services with `.\start-api.ps1`, `.\start-service.ps1`, and `.\start-frontend.ps1`. The database and tables are created automatically using true Code First approach!
 
 **Access the application:**
 - **Frontend**: http://localhost:5173
@@ -80,7 +82,11 @@ cd task-management-system
 
 ### 2. Database Setup
 
-The application uses Code-First migrations. Update the connection string in the following files if needed:
+The application uses **true Code First** Entity Framework approach. The database and tables are **automatically created** when you start the API or Windows Service for the first time.
+
+#### Connection String
+
+Update the connection string in the following files if your SQL Server configuration differs from the default:
 
 - `TaskManagement.API/appsettings.json`
 - `TaskManagement.API/appsettings.Development.json`
@@ -93,14 +99,38 @@ Default connection string:
 }
 ```
 
-#### Apply Migrations
+#### How It Works (Automatic Code First)
+
+The setup script (`.\setup.ps1`) only prepares migration files. The actual database creation happens automatically:
+
+1. **Setup phase** (`.\setup.ps1`):
+   - Checks for Entity Framework Core tools
+   - Creates migration files from entity classes (if they don't exist)
+   - Does NOT create the database yet
+
+2. **Runtime phase** (when you run `.\start-api.ps1` or `.\start-service.ps1`):
+   - Application checks if database exists
+   - If not, automatically creates the database
+   - Applies all pending migrations
+   - Seeds initial data (tags)
+   - Starts the application
+
+**No manual database setup required!** The application handles everything automatically using `context.Database.Migrate()`.
+
+#### Manual Migration Commands (if needed)
+
+If you need to manually manage migrations:
 
 ```bash
+# Create a new migration
 cd TaskManagement.API
-dotnet ef database update --project ..\TaskManagement.Infrastructure\TaskManagement.Infrastructure.csproj
+dotnet ef migrations add MigrationName --project ..\TaskManagement.Infrastructure\TaskManagement.Infrastructure.csproj
+
+# Remove last migration (if not applied)
+dotnet ef migrations remove --project ..\TaskManagement.Infrastructure\TaskManagement.Infrastructure.csproj
 ```
 
-This will create the database and seed initial tag data.
+Note: You don't need `dotnet ef database update` because the application does this automatically on startup.
 
 ### 3. Configuration
 
